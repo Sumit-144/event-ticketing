@@ -1,0 +1,196 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+// ─── ENUMS ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  ORGANIZER
+  ATTENDEE
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+  COMPLETED
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  REFUNDED
+}
+
+// ─── USER ────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(uuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         Role      @default(ATTENDEE)
+  avatarUrl    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  organizedEvents Event[]
+  bookings        Booking[]
+  refreshTokens   RefreshToken[]
+  auditLogs       AuditLog[]
+
+  @@index([email])
+  @@index([role])
+}
+
+
+// ─── REFRESH TOKEN ───────────────────────────────────────────────────────────
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  familyId  String
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+}
+
+// ─── CATEGORY ────────────────────────────────────────────────────────────────
+
+model Category {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  events EventCategory[]
+}
+
+
+
+// ─── EVENT ───────────────────────────────────────────────────────────────────
+
+model Event {
+  id          String      @id @default(uuid())
+  title       String
+  description String?
+  bannerUrl   String?
+  venue       String
+  city        String
+  startDate   DateTime
+  endDate     DateTime
+  status      EventStatus @default(DRAFT)
+  organizerId String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  deletedAt   DateTime?
+
+  organizer   User            @relation(fields: [organizerId], references: [id])
+  ticketTiers TicketTier[]
+  categories  EventCategory[]
+  bookings    Booking[]
+
+  @@index([organizerId])
+  @@index([status])
+  @@index([startDate])
+  @@index([deletedAt])
+  @@index([city, startDate])
+}
+
+// ─── EVENT <-> CATEGORY (many-to-many bridge) ────────────────────────────────
+
+model EventCategory {
+  eventId    String
+  categoryId String
+
+  event    Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, categoryId])
+}
+
+// ─── TICKET TIER ─────────────────────────────────────────────────────────────
+
+model TicketTier {
+  id          String   @id @default(uuid())
+  eventId     String
+  name        String
+  price       Decimal  @db.Decimal(10, 2)
+  totalSeats  Int
+  bookedSeats Int      @default(0)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  event    Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@index([eventId])
+}
+
+// ─── BOOKING ─────────────────────────────────────────────────────────────────
+
+model Booking {
+  id           String        @id @default(uuid())
+  userId       String
+  eventId      String
+  ticketTierId String
+  quantity     Int           @default(1)
+  totalAmount  Decimal       @db.Decimal(10, 2)
+  status       BookingStatus @default(PENDING)
+  ticketCode   String        @unique @default(uuid())
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
+
+  user       User       @relation(fields: [userId], references: [id])
+  event      Event      @relation(fields: [eventId], references: [id])
+  ticketTier TicketTier @relation(fields: [ticketTierId], references: [id])
+
+  @@index([userId])
+  @@index([eventId])
+  @@index([ticketTierId])
+  @@index([status])
+  @@index([ticketCode])
+}
+
+
+// ─── AUDIT LOG ───────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  entityType String
+  entityId   String
+  action     String
+  before     Json?
+  after      Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  
+}
