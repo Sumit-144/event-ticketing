@@ -27,6 +27,24 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+      
+  app:
+    build: .
+    image: event-ticketing:dev
+    init: true
+    env_file: .env
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-event_ticketing}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "127.0.0.1:${PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
 volumes:
   pgdata:
