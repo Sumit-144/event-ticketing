@@ -10,10 +10,16 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
     // Constructor initializes the Redis client with configuration from AppConfigModule
     constructor(private readonly config: AppConfigService){
+        /**
+         * Fails fast when Redis is unreachable: auth checks run on every request, so a
+         * long reconnect wait would stall the whole API instead of denying quickly.
+         */
         this.redisClient = new Redis({
-            host : this.config.redisHost,
-            port : this.config.redisPort,
-            password : this.config.redisPassword,
+            host: this.config.redisHost,
+            port: this.config.redisPort,
+            password: this.config.redisPassword,
+            maxRetriesPerRequest: 2,
+            connectTimeout: 3000,
         });
     }
 
