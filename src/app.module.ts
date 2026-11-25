@@ -7,9 +7,10 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseWrapperInterceptor } from './common/interceptors/response-wrapper.interceptor';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { RolesGuard } from './common/guards/roles.guard';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
-  imports: [AppConfigModule, PrismaModule, RedisModule],
+  imports: [AppConfigModule, PrismaModule, RedisModule, AuthModule],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
     {
