@@ -52,7 +52,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
 
     // Method to check if a key exists in Redis
-    async exists(key : string) : Promise<Boolean>{
+    async exists(key : string) : Promise<boolean>{
         const result = await this.redisClient.exists(key);
         return result === 1;
     }
