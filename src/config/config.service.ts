@@ -29,10 +29,6 @@ export class AppConfigService {
         return this.configService.get<string>('JWT_ACCESS_EXPIRES_IN')!;
     }
 
-    get jwtRefreshSecret(): string {
-        return this.configService.get<string>('JWT_REFRESH_SECRET')!;
-    }
-
     get jwtRefreshExpiresIn(): string {
         return this.configService.get<string>('JWT_REFRESH_EXPIRES_IN')!;
     }
