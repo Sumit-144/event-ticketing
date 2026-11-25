@@ -8,6 +8,10 @@ import { AppConfigService } from '../config/config.service';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { Logger } from '@nestjs/common';
+import { generateOpaqueToken, sha256Hex } from '../common/utils/crypto.util';
+import { durationToMs } from '../common/utils/duration.util';
+import { RefreshTokensRepository } from './refresh-tokens.repository';
 
 export interface PublicUser {
   id: string;
@@ -17,18 +21,27 @@ export interface PublicUser {
   createdAt: Date;
 }
 
+export interface AuthTokens {
+  accessToken: string;
+  refreshToken: string;
+}
+
 @Injectable()
 export class AuthService {
   // Hashed once at startup. Login for an unknown email compares against it,
   // so "no such user" costs the same time as "wrong password".
   private readonly dummyHash: Promise<string>;
+  private readonly logger = new Logger(AuthService.name);
+  private readonly refreshTtlMs: number;
 
   constructor(
     private readonly users: UsersService,
+    private readonly refreshTokens: RefreshTokensRepository,
     private readonly jwt: JwtService,
     private readonly config: AppConfigService,
   ) {
     this.dummyHash = bcrypt.hash(randomUUID(), this.config.bcryptSaltRounds);
+    this.refreshTtlMs = durationToMs(this.config.jwtRefreshExpiresIn);
   }
 
   async register(dto: RegisterDto): Promise<PublicUser> {
@@ -45,7 +58,7 @@ export class AuthService {
     return this.toPublicUser(user);
   }
 
-  async login(dto: LoginDto): Promise<{ accessToken: string; user: PublicUser }> {
+  async login(dto: LoginDto): Promise<AuthTokens & { user: PublicUser }> {
     const user = await this.users.findByEmail(dto.email);
     const hash = user ? user.passwordHash : await this.dummyHash;
     const passwordMatches = await bcrypt.compare(dto.password, hash);
@@ -56,6 +69,7 @@ export class AuthService {
 
     return {
       accessToken: await this.signAccessToken(user),
+      refreshToken: await this.issueRefreshToken(user.id, randomUUID()),
       user: this.toPublicUser(user),
     };
   }
@@ -74,5 +88,51 @@ export class AuthService {
   private toPublicUser(user: User): PublicUser {
     const { id, name, email, role, createdAt } = user;
     return { id, name, email, role, createdAt };
+  }
+
+    /**
+   * Rotates a refresh token: the presented token is consumed and a new pair is issued
+   * in the same family. Presenting an already-used token revokes the whole family.
+   */
+  async refresh(rawToken: string): Promise<AuthTokens> {
+    const tokenHash = sha256Hex(rawToken);
+    const claimed = await this.refreshTokens.claim(tokenHash, new Date());
+
+    if (!claimed) {
+      const existing = await this.refreshTokens.findByHash(tokenHash);
+      if (existing?.usedAt) {
+        await this.refreshTokens.deleteFamily(existing.familyId);
+        this.logger.warn(
+          `Refresh token reuse detected: user=${existing.userId} family=${existing.familyId}; family revoked`,
+        );
+      }
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    // We won the claim, so the row exists and nobody else can use it.
+    const row = (await this.refreshTokens.findByHash(tokenHash))!;
+    const user = await this.users.findById(row.userId);
+
+    if (!user) {
+      await this.refreshTokens.deleteFamily(row.familyId);
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    return {
+      accessToken: await this.signAccessToken(user),
+      refreshToken: await this.issueRefreshToken(user.id, row.familyId),
+    };
+  }
+
+  /** Creates an opaque token, stores only its hash, and returns the raw value once. */
+  private async issueRefreshToken(userId: string, familyId: string): Promise<string> {
+    const raw = generateOpaqueToken();
+    await this.refreshTokens.create({
+      tokenHash: sha256Hex(raw),
+      familyId,
+      userId,
+      expiresAt: new Date(Date.now() + this.refreshTtlMs),
+    });
+    return raw;
   }
 }

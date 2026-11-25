@@ -5,6 +5,8 @@ import { AppConfigService } from '../config/config.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { UsersModule } from "../users/users.module";
 import { AuthService } from "./auth.service";
+import { RefreshTokensRepository } from './refresh-tokens.repository';
+
 
 @Module({
   imports: [
@@ -23,6 +25,6 @@ import { AuthService } from "./auth.service";
       }),
     }),
   ],
-  providers: [JwtStrategy, AuthService],
+  providers: [JwtStrategy, AuthService, RefreshTokensRepository],
 })
 export class AuthModule {}
