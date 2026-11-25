@@ -5,12 +5,15 @@ import type { Socket } from 'socket.io';
 import { AppConfigService } from '../../config/config.service';
 import type { AuthenticatedUser } from '../interfaces/authenticated-user.interface';
 import type { JwtPayload } from '../interfaces/jwt-payload.interface';
+import { blacklistKey } from '../constants/redis-keys';
+import { RedisService } from '../../redis/redis.service';
 
 @Injectable()
 export class WsAuthGuard implements CanActivate {
   constructor(
     private readonly jwtService: JwtService,
     private readonly config: AppConfigService,
+    private readonly redis: RedisService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -23,6 +26,7 @@ export class WsAuthGuard implements CanActivate {
     return true;
   }
 
+  /** Verifies the handshake token the same way HTTP does, including the revocation check. */
   async authenticate(client: Socket): Promise<AuthenticatedUser> {
     const token = this.extractToken(client);
 
@@ -30,26 +34,32 @@ export class WsAuthGuard implements CanActivate {
       throw new WsException('Missing access token');
     }
 
+    let payload: JwtPayload;
     try {
-      const payload = await this.jwtService.verifyAsync<JwtPayload>(token, {
+      payload = await this.jwtService.verifyAsync<JwtPayload>(token, {
         secret: this.config.jwtAccessSecret,
         algorithms: ['HS256'],
       });
-
-      if (!payload.jti || !payload.exp) {
-        throw new Error('Malformed token');
-      }
-
-      return {
-        id: payload.sub,
-        email: payload.email,
-        role: payload.role,
-        jti: payload.jti,
-        exp: payload.exp,
-      };
     } catch {
       throw new WsException('Invalid or expired access token');
     }
+
+    if (!payload.jti || !payload.exp) {
+      throw new WsException('Invalid or expired access token');
+    }
+
+    // Fails closed: if Redis is down this throws instead of letting a revoked token in.
+    if (await this.redis.exists(blacklistKey(payload.jti))) {
+      throw new WsException('Token has been revoked');
+    }
+
+    return {
+      id: payload.sub,
+      email: payload.email,
+      role: payload.role,
+      jti: payload.jti,
+      exp: payload.exp,
+    };
   }
 
   private extractToken(client: Socket): string | undefined {
