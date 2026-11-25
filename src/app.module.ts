@@ -8,6 +8,7 @@ import { ResponseWrapperInterceptor } from './common/interceptors/response-wrapp
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { RolesGuard } from './common/guards/roles.guard';
 import { AuthModule } from './auth/auth.module';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
 @Module({
   imports: [AppConfigModule, PrismaModule, RedisModule, AuthModule],
@@ -23,6 +24,7 @@ import { AuthModule } from './auth/auth.module';
     },
     { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
     { provide: APP_INTERCEPTOR, useClass: ResponseWrapperInterceptor },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
