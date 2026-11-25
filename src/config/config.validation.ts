@@ -1,5 +1,16 @@
 import * as Joi from 'joi';
 
+
+const DURATION_PATTERN = /^\d+[smhd]$/;
+
+const duration = (fallback: string) =>
+  Joi.string()
+    .pattern(DURATION_PATTERN)
+    .default(fallback)
+    .messages({
+      'string.pattern.base': '{{#label}} must look like 30s, 15m, 2h or 7d',
+    });
+
 /**
  * When the application starts, it will validate the environment variables against this schema.
  * If any variable is missing or invalid, the application will throw an error and exit.
@@ -15,10 +26,14 @@ export const validationSchema = Joi.object({
   DATABASE_URL: Joi.string().required(),
 
   // JWT
-  JWT_ACCESS_SECRET: Joi.string().required(),
-  JWT_ACCESS_EXPIRES_IN: Joi.string().default('15m'),
-  JWT_REFRESH_SECRET: Joi.string().required(),
-  JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
+  JWT_ACCESS_SECRET: Joi.string().min(32).required(),
+  JWT_ACCESS_EXPIRES_IN: duration('15m'),
+  JWT_REFRESH_SECRET: Joi.string()
+    .min(32)
+    .required()
+    .invalid(Joi.ref('JWT_ACCESS_SECRET'))
+    .messages({ 'any.invalid': 'JWT_REFRESH_SECRET must differ from JWT_ACCESS_SECRET' }),
+  JWT_REFRESH_EXPIRES_IN: duration('7d'),
 
   // Redis
   REDIS_HOST: Joi.string().default('localhost'),
