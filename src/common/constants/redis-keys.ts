@@ -1,0 +1,1 @@
+export const blacklistKey = (jti: string): string => `auth:blacklist:${jti}`;
