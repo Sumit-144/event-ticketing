@@ -12,6 +12,9 @@ import { Logger } from '@nestjs/common';
 import { generateOpaqueToken, sha256Hex } from '../common/utils/crypto.util';
 import { durationToMs } from '../common/utils/duration.util';
 import { RefreshTokensRepository } from './refresh-tokens.repository';
+import { blacklistKey } from '../common/constants/redis-keys';
+import type { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
+import { RedisService } from '../redis/redis.service';
 
 export interface PublicUser {
   id: string;
@@ -37,6 +40,7 @@ export class AuthService {
   constructor(
     private readonly users: UsersService,
     private readonly refreshTokens: RefreshTokensRepository,
+    private readonly redis: RedisService,
     private readonly jwt: JwtService,
     private readonly config: AppConfigService,
   ) {
@@ -122,6 +126,24 @@ export class AuthService {
       accessToken: await this.signAccessToken(user),
       refreshToken: await this.issueRefreshToken(user.id, row.familyId),
     };
+  }
+
+  /**
+   * Ends a session: revokes the caller's refresh-token family first (the long-lived
+   * credential), then blacklists the current access token until it would expire anyway.
+   */
+  async logout(user: AuthenticatedUser, rawRefreshToken: string): Promise<void> {
+    const row = await this.refreshTokens.findByHash(sha256Hex(rawRefreshToken));
+
+    // Foreign or unknown tokens are ignored, which keeps logout idempotent.
+    if (row && row.userId === user.id) {
+      await this.refreshTokens.deleteFamily(row.familyId);
+    }
+
+    const ttlSeconds = user.exp - Math.floor(Date.now() / 1000);
+    if (ttlSeconds > 0) {
+      await this.redis.setWithExpiry(blacklistKey(user.jti), '1', ttlSeconds);
+    }
   }
 
   /** Creates an opaque token, stores only its hash, and returns the raw value once. */
