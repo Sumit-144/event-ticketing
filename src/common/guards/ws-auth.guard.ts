@@ -33,9 +33,20 @@ export class WsAuthGuard implements CanActivate {
     try {
       const payload = await this.jwtService.verifyAsync<JwtPayload>(token, {
         secret: this.config.jwtAccessSecret,
+        algorithms: ['HS256'],
       });
 
-      return { id: payload.sub, email: payload.email, role: payload.role };
+      if (!payload.jti || !payload.exp) {
+        throw new Error('Malformed token');
+      }
+
+      return {
+        id: payload.sub,
+        email: payload.email,
+        role: payload.role,
+        jti: payload.jti,
+        exp: payload.exp,
+      };
     } catch {
       throw new WsException('Invalid or expired access token');
     }
