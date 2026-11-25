@@ -61,12 +61,13 @@ model User {
 // ─── REFRESH TOKEN ───────────────────────────────────────────────────────────
 
 model RefreshToken {
-  id        String   @id @default(uuid())
-  token     String   @unique
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
   familyId  String
   userId    String
   expiresAt DateTime
-  createdAt DateTime @default(now())
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
