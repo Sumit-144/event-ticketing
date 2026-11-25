@@ -28,11 +28,6 @@ export const validationSchema = Joi.object({
   // JWT
   JWT_ACCESS_SECRET: Joi.string().min(32).required(),
   JWT_ACCESS_EXPIRES_IN: duration('15m'),
-  JWT_REFRESH_SECRET: Joi.string()
-    .min(32)
-    .required()
-    .invalid(Joi.ref('JWT_ACCESS_SECRET'))
-    .messages({ 'any.invalid': 'JWT_REFRESH_SECRET must differ from JWT_ACCESS_SECRET' }),
   JWT_REFRESH_EXPIRES_IN: duration('7d'),
 
   // Redis
