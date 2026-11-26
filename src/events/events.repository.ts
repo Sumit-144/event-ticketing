@@ -117,6 +117,7 @@ export class EventsRepository {
         status: true,
         startDate: true,
         endDate: true,
+        bannerUrl: true,
         _count: { select: { ticketTiers: true } },
       },
     });
@@ -175,6 +176,14 @@ export class EventsRepository {
     await this.prisma.event.update({
       where: { id, deletedAt: null },
       data: { deletedAt: new Date() },
+    });
+  }
+
+  /** Sets the banner path. Throws P2025 if the event is missing or soft-deleted. */
+  async setBannerUrl(id: string, bannerUrl: string): Promise<void> {
+    await this.prisma.event.update({
+      where: { id, deletedAt: null },
+      data: { bannerUrl },
     });
   }
 

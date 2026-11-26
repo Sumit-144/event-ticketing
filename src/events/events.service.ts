@@ -25,6 +25,7 @@ import {
   TicketTierView,
 } from './events.types';
 import { hashEventFilters } from './utils/filter-hash.util';
+import { UploadService } from '../upload/upload.service';
 
 export interface EventListPage {
   items: EventListItem[];
@@ -43,6 +44,7 @@ export class EventsService {
     private readonly repo: EventsRepository,
     private readonly cache: EventsCacheService,
     private readonly categories: CategoriesService,
+    private readonly upload: UploadService,
   ) {}
 
   // ─── Reads ─────────────────────────────────────────────────────────────────
@@ -186,6 +188,35 @@ export class EventsService {
       throw new ConflictException('Only published events can be cancelled');
     }
     return this.transition(id, EventStatus.PUBLISHED, EventStatus.CANCELLED);
+  }
+
+  /** Replaces the banner: save new file, update DB, then delete the old file (never the reverse). */
+  async setBanner(
+    user: AuthenticatedUser,
+    id: string,
+    file: Express.Multer.File | undefined,
+  ): Promise<EventDetail> {
+    const target = await this.requireTarget(id);
+    this.assertCanManage(user, target.organizerId);
+    this.assertEditable(target.status);
+    if (!file) {
+      throw new BadRequestException('Banner image is required (multipart field "file")');
+    }
+
+    const newUrl = await this.upload.saveEventBanner(file);
+    try {
+      await this.repo.setBannerUrl(id, newUrl);
+    } catch (error) {
+      await this.upload.deleteBanner(newUrl); // do not leave an orphan behind
+      if (isPrismaError(error, 'P2025')) throw new NotFoundException('Event not found');
+      throw error;
+    }
+    await this.upload.deleteBanner(target.bannerUrl);
+    await this.invalidateEvent(id);
+
+    const event = await this.repo.findDetailAnyStatus(id);
+    if (!event) throw new NotFoundException('Event not found');
+    return event;
   }
 
   // ─── Tier writes ───────────────────────────────────────────────────────────
