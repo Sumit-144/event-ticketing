@@ -10,9 +10,10 @@ import { RolesGuard } from './common/guards/roles.guard';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { CategoriesModule } from './categories/categories.module';
+import { EventsModule } from './events/events.module';
 
 @Module({
-  imports: [AppConfigModule, PrismaModule, RedisModule, AuthModule, CategoriesModule],
+  imports: [AppConfigModule, PrismaModule, RedisModule, AuthModule, CategoriesModule, EventsModule],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
     {
