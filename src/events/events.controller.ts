@@ -1,17 +1,9 @@
 import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  HttpCode,
-  HttpStatus,
-  Param,
-  Patch,
-  Post,
-  Query,
-  applyDecorators,
+  Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query,
+  UploadedFile, UseInterceptors, applyDecorators,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '../../generated/prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
@@ -148,6 +140,28 @@ export class EventsController {
     @Param('id', ParseUuidPipe) id: string,
   ): Promise<EventDetail> {
     return this.eventsService.cancel(user, id);
+  }
+
+  @Post(':id/banner')
+  @ManagerOnly()
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
+  @ApiOperation({ summary: 'Upload or replace the event banner (JPEG, PNG or WebP)' })
+  @ResponseMessage('Event banner updated successfully')
+  uploadBanner(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUuidPipe) id: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ): Promise<EventDetail> {
+    return this.eventsService.setBanner(user, id, file);
   }
 
   // ─── Ticket tier writes ────────────────────────────────────────────────────

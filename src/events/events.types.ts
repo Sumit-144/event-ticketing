@@ -53,6 +53,7 @@ export interface EventWriteTarget {
   status: EventStatus;
   startDate: Date;
   endDate: Date;
+  bannerUrl: string | null;
   tierCount: number;
 }
 
