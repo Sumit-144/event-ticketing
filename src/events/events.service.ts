@@ -26,6 +26,7 @@ import {
 } from './events.types';
 import { hashEventFilters } from './utils/filter-hash.util';
 import { UploadService } from '../upload/upload.service';
+import { SeatCounterService } from '../cache/seat-counter.service';
 
 export interface EventListPage {
   items: EventListItem[];
@@ -43,6 +44,7 @@ export class EventsService {
   constructor(
     private readonly repo: EventsRepository,
     private readonly cache: EventsCacheService,
+    private readonly seats: SeatCounterService,
     private readonly categories: CategoriesService,
     private readonly upload: UploadService,
   ) {}
@@ -266,6 +268,8 @@ export class EventsService {
       );
     }
     await this.cache.evictDetail(eventId);
+    // A capacity change makes the Redis seat hint stale; drop it so it reloads from the DB.
+    if (dto.totalSeats !== undefined) await this.seats.invalidate(tierId);
 
     const tier = await this.repo.findTier(eventId, tierId);
     if (!tier) throw new NotFoundException('Ticket tier not found');
