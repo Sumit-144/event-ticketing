@@ -27,6 +27,9 @@ import {
 import { hashEventFilters } from './utils/filter-hash.util';
 import { UploadService } from '../upload/upload.service';
 import { SeatCounterService } from '../cache/seat-counter.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { publishAudit } from '../common/events/publish.util';
+import { eventSnapshot } from './utils/event-snapshot.util';
 
 export interface EventListPage {
   items: EventListItem[];
@@ -47,6 +50,7 @@ export class EventsService {
     private readonly seats: SeatCounterService,
     private readonly categories: CategoriesService,
     private readonly upload: UploadService,
+    private readonly emitter: EventEmitter2,
   ) {}
 
   // ─── Reads ─────────────────────────────────────────────────────────────────
@@ -102,6 +106,14 @@ export class EventsService {
       categoryIds: dto.categoryIds,
     });
     await this.invalidateEvent(event.id);
+    publishAudit(this.emitter, {
+      userId: user.id,
+      entityType: 'Event',
+      entityId: event.id,
+      action: 'CREATE',
+      before: null,
+      after: eventSnapshot(event),
+    });
     return event;
   }
 
@@ -109,6 +121,8 @@ export class EventsService {
     const target = await this.requireTarget(id);
     this.assertCanManage(user, target.organizerId);
     this.assertEditable(target.status);
+
+    const before = await this.repo.findDetailAnyStatus(id); // audit snapshot only
 
     const scalars: EventScalarUpdate = {
       title: dto.title,
@@ -145,6 +159,14 @@ export class EventsService {
       throw error;
     }
     await this.invalidateEvent(id);
+    publishAudit(this.emitter, {
+      userId: user.id,
+      entityType: 'Event',
+      entityId: id,
+      action: 'UPDATE',
+      before: before ? eventSnapshot(before) : null,
+      after: eventSnapshot(updated),
+    });
     return updated;
   }
 
@@ -159,6 +181,14 @@ export class EventsService {
       throw new ConflictException('Event has active bookings; cancel the event instead');
     }
     await this.invalidateEvent(id);
+    publishAudit(this.emitter, {
+      userId: user.id,
+      entityType: 'Event',
+      entityId: id,
+      action: 'DELETE',
+      before: { status: target.status },
+      after: null,
+    });
   }
 
   /** DRAFT to PUBLISHED (D10). The transition itself is atomic in the DB. */
@@ -175,7 +205,7 @@ export class EventsService {
     if (target.startDate.getTime() <= Date.now()) {
       throw new BadRequestException('Cannot publish an event whose start date has passed');
     }
-    return this.transition(id, EventStatus.DRAFT, EventStatus.PUBLISHED);
+    return this.transition(user, id, EventStatus.DRAFT, EventStatus.PUBLISHED, 'PUBLISH');
   }
 
   /** PUBLISHED to CANCELLED (D15). Does NOT auto-cancel bookings yet (D12, Phase 5). */
@@ -185,7 +215,7 @@ export class EventsService {
     if (target.status !== EventStatus.PUBLISHED) {
       throw new ConflictException('Only published events can be cancelled');
     }
-    return this.transition(id, EventStatus.PUBLISHED, EventStatus.CANCELLED);
+    return this.transition(user, id, EventStatus.PUBLISHED, EventStatus.CANCELLED, 'CANCEL');
   }
 
   /** Replaces the banner: save new file, update DB, then delete the old file (never the reverse). */
@@ -211,6 +241,14 @@ export class EventsService {
     }
     await this.upload.deleteBanner(target.bannerUrl);
     await this.invalidateEvent(id);
+    publishAudit(this.emitter, {
+      userId: user.id,
+      entityType: 'Event',
+      entityId: id,
+      action: 'UPDATE_BANNER',
+      before: { bannerUrl: target.bannerUrl },
+      after: { bannerUrl: newUrl },
+    });
 
     const event = await this.repo.findDetailAnyStatus(id);
     if (!event) throw new NotFoundException('Event not found');
@@ -316,13 +354,27 @@ export class EventsService {
   }
 
   /** Atomic status change; false means another request moved the event first. */
-  private async transition(id: string, from: EventStatus, to: EventStatus): Promise<EventDetail> {
+  private async transition(
+    user: AuthenticatedUser,
+    id: string,
+    from: EventStatus,
+    to: EventStatus,
+    action: 'PUBLISH' | 'CANCEL',
+  ): Promise<EventDetail> {
     if (!(await this.repo.transitionStatus(id, from, to))) {
       throw new ConflictException('Event status changed concurrently; reload and retry');
     }
     await this.invalidateEvent(id);
     const event = await this.repo.findDetailAnyStatus(id);
     if (!event) throw new NotFoundException('Event not found');
+    publishAudit(this.emitter, {
+      userId: user.id,
+      entityType: 'Event',
+      entityId: id,
+      action,
+      before: { status: from },
+      after: { status: to },
+    });
     return event;
   }
 
