@@ -8,6 +8,7 @@ import { TicketProcessor } from './processors/ticket.processor';
 import { QueueProducer } from './producers/queue.producer';
 import { QUEUES } from './queue.constants';
 import { QueueRepository } from './queue.repository';
+import { BookingQueueListener } from './listeners/booking-queue.listener';
 
 /**
  * BullMQ setup (D22 to D26). Own Redis connections (never RedisService's fail-fast client),
@@ -47,6 +48,7 @@ import { QueueRepository } from './queue.repository';
     EmailProcessor,
     TicketProcessor,
     ReminderProcessor,
+    BookingQueueListener,
   ],
 })
 export class QueueModule {}
