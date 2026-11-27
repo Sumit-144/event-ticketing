@@ -171,11 +171,27 @@ export class EventsRepository {
     return toDetail(row);
   }
 
-  /** Soft delete. Throws P2025 if already deleted or missing. */
-  async softDelete(id: string): Promise<void> {
-    await this.prisma.event.update({
-      where: { id, deletedAt: null },
-      data: { deletedAt: new Date() },
+  /**
+   * Atomic soft delete (D21): lock the event row, count live bookings, then update, all in
+   * one transaction. A booking holds a FOR SHARE lock on the same row, so it either commits
+   * first (delete sees it and refuses) or starts after (it sees deletedAt and gets 404).
+   */
+  softDeleteIfNoLiveBookings(
+    id: string,
+  ): Promise<'deleted' | 'has_live_bookings' | 'not_found'> {
+    return this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`
+        SELECT id FROM "Event" WHERE id = ${id} AND "deletedAt" IS NULL FOR UPDATE
+      `);
+      if (locked.length === 0) return 'not_found' as const;
+
+      const live = await tx.booking.count({
+        where: { eventId: id, deletedAt: null, status: { in: ['PENDING', 'CONFIRMED'] } },
+      });
+      if (live > 0) return 'has_live_bookings' as const;
+
+      await tx.event.update({ where: { id }, data: { deletedAt: new Date() } });
+      return 'deleted' as const;
     });
   }
 
@@ -187,16 +203,6 @@ export class EventsRepository {
     });
   }
 
-  /** Bookings that still hold seats; D12 blocks deleting an event while any exist. */
-  countLiveBookings(eventId: string): Promise<number> {
-    return this.prisma.booking.count({
-      where: {
-        eventId,
-        deletedAt: null,
-        status: { in: ['PENDING', 'CONFIRMED'] },
-      },
-    });
-  }
 
   /**
    * Atomic status transition: only succeeds if the event is still in `from`.
