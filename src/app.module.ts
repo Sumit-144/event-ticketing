@@ -11,9 +11,10 @@ import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { CategoriesModule } from './categories/categories.module';
 import { EventsModule } from './events/events.module';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 
 @Module({
-  imports: [AppConfigModule, PrismaModule, RedisModule, AuthModule, CategoriesModule, EventsModule],
+  imports: [AppConfigModule, PrismaModule, RedisModule, AuthModule, CategoriesModule, EventsModule, EventEmitterModule],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
     {
