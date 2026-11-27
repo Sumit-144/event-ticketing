@@ -15,6 +15,8 @@ import { RefreshTokensRepository } from './refresh-tokens.repository';
 import { blacklistKey } from '../common/constants/redis-keys';
 import type { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
 import { RedisService } from '../redis/redis.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { publishAudit } from '../common/events/publish.util';
 
 export interface PublicUser {
   id: string;
@@ -43,6 +45,7 @@ export class AuthService {
     private readonly redis: RedisService,
     private readonly jwt: JwtService,
     private readonly config: AppConfigService,
+    private readonly emitter: EventEmitter2,
   ) {
     this.dummyHash = bcrypt.hash(randomUUID(), this.config.bcryptSaltRounds);
     this.refreshTtlMs = durationToMs(this.config.jwtRefreshExpiresIn);
@@ -105,10 +108,18 @@ export class AuthService {
     if (!claimed) {
       const existing = await this.refreshTokens.findByHash(tokenHash);
       if (existing?.usedAt) {
-        await this.refreshTokens.deleteFamily(existing.familyId);
+        const revoked = await this.refreshTokens.deleteFamily(existing.familyId);
         this.logger.warn(
           `Refresh token reuse detected: user=${existing.userId} family=${existing.familyId}; family revoked`,
         );
+        publishAudit(this.emitter, {
+          userId: existing.userId,
+          entityType: 'RefreshTokenFamily',
+          entityId: existing.familyId,
+          action: 'REFRESH_TOKEN_REUSE',
+          before: null,
+          after: { revokedTokens: revoked },
+        });
       }
       throw new UnauthorizedException('Invalid refresh token');
     }
