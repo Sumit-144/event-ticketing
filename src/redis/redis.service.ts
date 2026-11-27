@@ -78,6 +78,27 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
         return this.redisClient.decr(key);
     }
 
+    // Method to SET a key with expiry only if it does not exist yet (SET ... EX ... NX)
+    async setIfAbsent(key : string, value : string, ttlSeconds : number) : Promise<boolean> {
+        const result = await this.redisClient.set(key, value, 'EX', ttlSeconds, 'NX');
+        return result === 'OK';
+    }
+
+    /**
+     * Atomically adds `delta` to a numeric key ONLY if it exists (Lua, so check + update
+     * cannot interleave). Returns the new value, or null if the key is missing.
+     * A plain DECRBY on a missing key would create a negative counter.
+     */
+    async adjustIfExists(key : string, delta : number) : Promise<number | null> {
+        const result = await this.redisClient.eval(
+            "if redis.call('EXISTS', KEYS[1]) == 1 then return redis.call('INCRBY', KEYS[1], ARGV[1]) end return false",
+            1,
+            key,
+            String(delta),
+        );
+        return typeof result === 'number' ? result : null;
+    }
+
     // Method to fetch all keys matching a pattern
     async keys(pattern : string) : Promise<string[]>{
         return this.redisClient.keys(pattern);
