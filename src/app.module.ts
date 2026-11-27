@@ -12,9 +12,10 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { CategoriesModule } from './categories/categories.module';
 import { EventsModule } from './events/events.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { BookingsModule } from './bookings/bookings.module';
 
 @Module({
-  imports: [AppConfigModule, PrismaModule, RedisModule, AuthModule, CategoriesModule, EventsModule, EventEmitterModule],
+  imports: [AppConfigModule, PrismaModule, RedisModule, AuthModule, CategoriesModule, EventsModule, BookingsModule, EventEmitterModule.forRoot()],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
     {
