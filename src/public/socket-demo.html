@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Live seats demo</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+    label { display: block; margin-top: .75rem; font-size: .85rem; color: #555; }
+    input { width: 100%; padding: .45rem; box-sizing: border-box; font-family: monospace; }
+    button { margin: .75rem .5rem 0 0; padding: .45rem .9rem; cursor: pointer; }
+    #status { font-weight: 600; margin-top: 1rem; }
+    #tiers { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1rem; }
+    .tier { border: 1px solid #ccc; border-radius: 8px; padding: .75rem 1rem; min-width: 150px; }
+    .tier b { font-size: 2rem; display: block; }
+    .flash { background: #fff3b0; }
+    #log { background: #111; color: #9fef9f; padding: .75rem; height: 220px; overflow: auto;
+           font-family: monospace; font-size: .8rem; margin-top: 1rem; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>Live seats demo</h1>
+  <p>Paste an access token and an event id, connect, join the event, then book a ticket from
+     another terminal. The seat count updates here without a refresh.</p>
+
+  <label for="token">Access token (from POST /auth/login, .data.accessToken)</label>
+  <input id="token" autocomplete="off" />
+  <label for="eventId">Event id (UUID)</label>
+  <input id="eventId" autocomplete="off" />
+
+  <button id="connect">Connect</button>
+  <button id="join" disabled>Join event</button>
+  <button id="leave" disabled>Leave event</button>
+  <button id="disconnect" disabled>Disconnect</button>
+
+  <div id="status">Disconnected</div>
+  <div id="tiers"></div>
+  <div id="log"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.8.1/socket.io.min.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let socket = null;
+
+    function log(msg) {
+      const line = document.createElement('div');
+      line.textContent = new Date().toLocaleTimeString() + '  ' + msg;
+      $('log').appendChild(line);
+      $('log').scrollTop = $('log').scrollHeight;
+    }
+    function setConnected(on) {
+      $('status').textContent = on ? 'Connected' : 'Disconnected';
+      $('join').disabled = $('leave').disabled = $('disconnect').disabled = !on;
+      $('connect').disabled = on;
+    }
+    function showSeats({ tierId, availableSeats }) {
+      let card = document.getElementById('tier-' + tierId);
+      if (!card) {
+        card = document.createElement('div');
+        card.className = 'tier';
+        card.id = 'tier-' + tierId;
+        card.innerHTML = '<small></small><b></b>seats left';
+        card.querySelector('small').textContent = 'Tier ' + tierId.slice(0, 8);
+        $('tiers').appendChild(card);
+      }
+      card.querySelector('b').textContent = availableSeats;
+      card.classList.add('flash');
+      setTimeout(() => card.classList.remove('flash'), 600);
+    }
+
+    $('connect').onclick = () => {
+      socket = io('/notifications', { auth: { token: $('token').value.trim() }, reconnection: false });
+      socket.on('connect', () => { setConnected(true); log('connected, id ' + socket.id); });
+      socket.on('disconnect', (reason) => { setConnected(false); log('disconnected: ' + reason); });
+      socket.on('connect_error', (err) => log('connect error: ' + err.message));
+      socket.on('auth_error', (e) => log('auth error: ' + e.message));
+      socket.on('exception', (e) => log('server exception: ' + JSON.stringify(e)));
+      socket.on('joined', (e) => log('joined event ' + e.eventId));
+      socket.on('left', (e) => log('left event ' + e.eventId));
+      socket.on('seats_updated', (e) => { log('seats_updated ' + JSON.stringify(e)); showSeats(e); });
+      socket.on('booking_confirmed', (e) => log('booking_confirmed ' + JSON.stringify(e)));
+      socket.on('organizer_alert', (e) => log('organizer_alert ' + JSON.stringify(e)));
+    };
+    $('join').onclick = () => socket.emit('join_event', { eventId: $('eventId').value.trim() });
+    $('leave').onclick = () => socket.emit('leave_event', { eventId: $('eventId').value.trim() });
+    $('disconnect').onclick = () => socket.disconnect();
+  </script>
+</body>
+</html>

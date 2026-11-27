@@ -4,6 +4,7 @@ import { resolve } from 'path';
 import { AppModule } from './app.module';
 import { AppConfigService } from './config/config.service';
 import { UPLOADS_URL_PREFIX } from './upload/upload.constants';
+import { join } from 'path';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -18,6 +19,7 @@ async function bootstrap() {
     immutable: true,
     setHeaders: (res) => res.setHeader('X-Content-Type-Options', 'nosniff'),
   });
+  app.useStaticAssets(join(__dirname, 'public'), { index: false });
 
   await app.listen(config.port);
 }
