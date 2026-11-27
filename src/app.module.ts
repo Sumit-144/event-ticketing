@@ -13,9 +13,10 @@ import { CategoriesModule } from './categories/categories.module';
 import { EventsModule } from './events/events.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { BookingsModule } from './bookings/bookings.module';
+import { AuditModule } from './audit/audit.module';
 
 @Module({
-  imports: [AppConfigModule, PrismaModule, RedisModule, AuthModule, CategoriesModule, EventsModule, BookingsModule, EventEmitterModule.forRoot()],
+  imports: [AppConfigModule, PrismaModule, RedisModule, AuthModule, CategoriesModule, EventsModule, BookingsModule, EventEmitterModule.forRoot(), AuditModule],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
     {
