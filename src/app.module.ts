@@ -15,9 +15,10 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { BookingsModule } from './bookings/bookings.module';
 import { AuditModule } from './audit/audit.module';
 import { QueueModule } from './queue/queue.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
-  imports: [AppConfigModule, PrismaModule, RedisModule, AuthModule, CategoriesModule, EventsModule, BookingsModule, EventEmitterModule.forRoot(), AuditModule, QueueModule],
+  imports: [AppConfigModule, PrismaModule, RedisModule, AuthModule, CategoriesModule, EventsModule, BookingsModule, EventEmitterModule.forRoot(), AuditModule, QueueModule, NotificationsModule],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
     {
