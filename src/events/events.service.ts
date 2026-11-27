@@ -146,19 +146,15 @@ export class EventsService {
     return updated;
   }
 
-  /** Soft delete; blocked while live bookings exist (D12). */
+  /** Soft delete; blocked while live bookings exist (D12), atomically (D21). */
   async remove(user: AuthenticatedUser, id: string): Promise<void> {
     const target = await this.requireTarget(id);
     this.assertCanManage(user, target.organizerId);
 
-    if ((await this.repo.countLiveBookings(id)) > 0) {
+    const result = await this.repo.softDeleteIfNoLiveBookings(id);
+    if (result === 'not_found') throw new NotFoundException('Event not found');
+    if (result === 'has_live_bookings') {
       throw new ConflictException('Event has active bookings; cancel the event instead');
-    }
-    try {
-      await this.repo.softDelete(id);
-    } catch (error) {
-      if (isPrismaError(error, 'P2025')) throw new NotFoundException('Event not found');
-      throw error;
     }
     await this.invalidateEvent(id);
   }
