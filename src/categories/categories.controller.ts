@@ -18,6 +18,7 @@ import { ParseUuidPipe } from '../common/pipes/parse-uuid.pipe';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('Categories')
 @Controller('categories')
@@ -37,8 +38,8 @@ export class CategoriesController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a category (admin only)' })
   @ResponseMessage('Category created successfully')
-  create(@Body() dto: CreateCategoryDto) {
-    return this.categoriesService.create(dto);
+  create(@CurrentUser('id') userId: string, @Body() dto: CreateCategoryDto) {
+    return this.categoriesService.create(userId, dto);
   }
 
   @Patch(':id')
@@ -47,10 +48,11 @@ export class CategoriesController {
   @ApiOperation({ summary: 'Update a category (admin only)' })
   @ResponseMessage('Category updated successfully')
   update(
+    @CurrentUser('id') userId: string,
     @Param('id', ParseUuidPipe) id: string,
     @Body() dto: UpdateCategoryDto,
   ) {
-    return this.categoriesService.update(id, dto);
+    return this.categoriesService.update(userId, id, dto);
   }
 
   @Delete(':id')
@@ -58,7 +60,7 @@ export class CategoriesController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a category (admin only)' })
-  remove(@Param('id', ParseUuidPipe) id: string) {
-    return this.categoriesService.remove(id);
+  remove(@CurrentUser('id') userId: string, @Param('id', ParseUuidPipe) id: string) {
+    return this.categoriesService.remove(userId, id);
   }
 }

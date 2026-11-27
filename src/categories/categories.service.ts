@@ -10,30 +10,43 @@ import { isPrismaError } from '../common/utils/prisma-error.util';
 import { CategoriesRepository } from './categories.repository';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { publishAudit } from '../common/events/publish.util';
 
 @Injectable()
 export class CategoriesService {
   constructor(
     private readonly categoriesRepository: CategoriesRepository,
     private readonly eventsCache: EventsCacheService,
+    private readonly emitter: EventEmitter2,
   ) {}
 
   list(): Promise<Category[]> {
     return this.categoriesRepository.findAll();
   }
 
-  async create(dto: CreateCategoryDto): Promise<Category> {
+  async create(userId: string, dto: CreateCategoryDto): Promise<Category> {
+    let created: Category;
     try {
-      return await this.categoriesRepository.create({
+      created = await this.categoriesRepository.create({
         name: dto.name,
         description: dto.description,
       });
     } catch (error) {
       throw this.mapError(error);
     }
+    publishAudit(this.emitter, {
+      userId,
+      entityType: 'Category',
+      entityId: created.id,
+      action: 'CREATE',
+      before: null,
+      after: { name: created.name, description: created.description },
+    });
+    return created;
   }
 
-  async update(id: string, dto: UpdateCategoryDto): Promise<Category> {
+  async update(userId: string, id: string, dto: UpdateCategoryDto): Promise<Category> {
     let updated: Category;
     try {
       updated = await this.categoriesRepository.update(id, {
@@ -43,18 +56,30 @@ export class CategoriesService {
     } catch (error) {
       throw this.mapError(error);
     }
-    // Category names are embedded in cached event lists (D13).
     await this.eventsCache.bumpListVersion();
+    publishAudit(this.emitter, {
+      userId,
+      entityType: 'Category',
+      entityId: id,
+      action: 'UPDATE',
+      after: { name: updated.name, description: updated.description },
+    });
     return updated;
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(userId: string, id: string): Promise<void> {
     try {
       await this.categoriesRepository.delete(id);
     } catch (error) {
       throw this.mapError(error);
     }
     await this.eventsCache.bumpListVersion();
+    publishAudit(this.emitter, {
+      userId,
+      entityType: 'Category',
+      entityId: id,
+      action: 'DELETE',
+    });
   }
 
   /** Throws 400 naming any id that does not exist. Used by events before linking categories. */
